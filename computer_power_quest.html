@@ -1,0 +1,1132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Power Up & Shut Down: Interactive PC Simulator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600&family=Inter:wght@300;400;600;700;800&display=swap');
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0f172a;
+            color: #f8fafc;
+            user-select: none;
+        }
+
+        .code-font {
+            font-family: 'Fira Code', monospace;
+        }
+
+        /* Glowing LEDs and effects */
+        .led-off { background-color: #334155; box-shadow: inset 0 1px 3px rgba(0,0,0,0.5); }
+        .led-red { background-color: #ef4444; box-shadow: 0 0 10px #ef4444, inset 0 -1px 2px rgba(0,0,0,0.3); }
+        .led-green { background-color: #22c55e; box-shadow: 0 0 10px #22c55e, inset 0 -1px 2px rgba(0,0,0,0.3); }
+        .led-amber { background-color: #f59e0b; box-shadow: 0 0 10px #f59e0b, inset 0 -1px 2px rgba(0,0,0,0.3); }
+        .led-blue { background-color: #3b82f6; box-shadow: 0 0 10px #3b82f6, inset 0 -1px 2px rgba(0,0,0,0.3); }
+
+        .pulsing {
+            animation: pulse-glow 1.5s infinite alternate;
+        }
+
+        @keyframes pulse-glow {
+            0% { transform: scale(1); box-shadow: 0 0 5px currentColor; }
+            100% { transform: scale(1.05); box-shadow: 0 0 20px currentColor, 0 0 30px currentColor; }
+        }
+
+        .screen-glitch {
+            animation: glitch 0.2s linear infinite;
+        }
+
+        @keyframes glitch {
+            0% { transform: translate(0) }
+            20% { transform: translate(-3px, 3px) }
+            40% { transform: translate(-3px, -3px) }
+            60% { transform: translate(3px, 3px) }
+            80% { transform: translate(3px, -3px) }
+            100% { transform: translate(0) }
+        }
+
+        /* Interactive highlight for target step */
+        .step-target {
+            outline: 3px solid #38bdf8 !important;
+            outline-offset: 4px;
+            animation: target-bounce 1s infinite alternate;
+        }
+
+        @keyframes target-bounce {
+            0% { outline-color: #38bdf8; box-shadow: 0 0 10px #38bdf8; }
+            100% { outline-color: #818cf8; box-shadow: 0 0 25px #818cf8; }
+        }
+
+        .crt-overlay {
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%);
+            background-size: 100% 4px;
+        }
+
+        /* Tooltip style */
+        .tooltip-container {
+            position: relative;
+        }
+        .tooltip-container:hover .tooltip-text {
+            visibility: visible;
+            opacity: 1;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between overflow-x-hidden">
+
+    <!-- Top Header Navigation -->
+    <header class="bg-slate-900 border-b border-slate-800 px-6 py-4 flex flex-wrap items-center justify-between gap-4 shadow-xl z-20">
+        <div class="flex items-center gap-3">
+            <div class="p-2.5 bg-cyan-500/10 border border-cyan-500/30 rounded-xl text-cyan-400">
+                <i class="fa-solid fa-desktop text-2xl"></i>
+            </div>
+            <div>
+                <h1 class="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-blue-500">
+                    Power Master PC
+                </h1>
+                <p class="text-xs text-slate-400">Interactive Workstation Power & Maintenance Simulator</p>
+            </div>
+        </div>
+
+        <!-- Mode Selector Buttons -->
+        <div class="flex bg-slate-950 p-1.5 rounded-xl border border-slate-800 text-sm font-medium">
+            <button id="mode-turn-on" onclick="setGameMode('on')" class="px-4 py-2 rounded-lg transition-all flex items-center gap-2 bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-lg">
+                <i class="fa-solid fa-power-off"></i> Mode: Turn ON
+            </button>
+            <button id="mode-turn-off" onclick="setGameMode('off')" class="px-4 py-2 rounded-lg transition-all flex items-center gap-2 text-slate-400 hover:text-white">
+                <i class="fa-solid fa-circle-pause"></i> Mode: Turn OFF
+            </button>
+            <button id="mode-sandbox" onclick="setGameMode('sandbox')" class="px-4 py-2 rounded-lg transition-all flex items-center gap-2 text-slate-400 hover:text-white">
+                <i class="fa-solid fa-flask"></i> Sandbox / Free Play
+            </button>
+        </div>
+
+        <!-- Score & Stats Bar -->
+        <div class="flex items-center gap-6 bg-slate-950 px-4 py-2 rounded-xl border border-slate-800 text-sm">
+            <div class="text-center">
+                <span class="text-xs text-slate-500 uppercase tracking-wider block">Time</span>
+                <span id="timer-display" class="font-bold code-font text-amber-400 text-base">00:00</span>
+            </div>
+            <div class="h-6 w-px bg-slate-800"></div>
+            <div class="text-center">
+                <span class="text-xs text-slate-500 uppercase tracking-wider block">Score</span>
+                <span id="score-display" class="font-bold code-font text-emerald-400 text-base">1000</span>
+            </div>
+            <div class="h-6 w-px bg-slate-800"></div>
+            <button onclick="toggleAudio()" id="audio-toggle" class="text-slate-400 hover:text-cyan-400 transition-colors p-1" title="Toggle Sound">
+                <i class="fa-solid fa-volume-high text-lg"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Workspace Layout -->
+    <main class="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">
+        
+        <!-- Left Side: Task Guide & Educational Info Panel -->
+        <div class="lg:col-span-1 bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-2xl backdrop-blur flex flex-col justify-between h-full min-h-[500px]">
+            <div>
+                <div class="flex items-center justify-between pb-4 mb-4 border-b border-slate-800">
+                    <h2 class="font-bold text-slate-200 flex items-center gap-2">
+                        <i class="fa-solid fa-list-check text-cyan-400"></i> Sequence Guide
+                    </h2>
+                    <span id="step-counter" class="text-xs font-semibold px-2.5 py-1 bg-cyan-950 text-cyan-400 border border-cyan-800/50 rounded-full">
+                        Step 1 of 5
+                    </span>
+                </div>
+
+                <!-- Step Objectives List -->
+                <div id="step-instructions" class="space-y-3 mb-6">
+                    <!-- Dynamic Steps populate here -->
+                </div>
+
+                <!-- Dynamic Tip Box -->
+                <div class="bg-slate-950 border border-slate-800/80 rounded-xl p-4 text-xs text-slate-300 relative overflow-hidden">
+                    <div class="absolute -right-2 -bottom-2 opacity-10 text-slate-400 text-6xl">
+                        <i class="fa-solid fa-lightbulb"></i>
+                    </div>
+                    <div class="flex items-start gap-2.5 mb-1.5 text-amber-400 font-semibold">
+                        <i class="fa-solid fa-circle-info text-sm mt-0.5"></i>
+                        <span id="tip-title">Tech Tip</span>
+                    </div>
+                    <p id="tip-content" class="leading-relaxed text-slate-400">
+                        Always start from the main wall power source. Check wall outlets and power switches before attempting to turn on devices.
+                    </p>
+                </div>
+            </div>
+
+            <!-- Controls/Reset -->
+            <div class="pt-4 border-t border-slate-800 mt-6 flex gap-2">
+                <button onclick="resetCurrentSequence()" class="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium rounded-xl text-xs transition-colors flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-rotate-right"></i> Reset Step
+                </button>
+                <button onclick="showHint()" class="px-3 py-2.5 bg-amber-500/10 border border-amber-500/30 text-amber-400 hover:bg-amber-500/20 rounded-xl text-xs transition-colors" title="Get Hint">
+                    <i class="fa-solid fa-wand-magic-sparkles"></i> Hint
+                </button>
+            </div>
+        </div>
+
+        <!-- Center/Right: Interactive Graphic Workstation Scene -->
+        <div class="lg:col-span-3 bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl relative overflow-hidden flex flex-col justify-between gap-6 min-h-[620px]">
+            
+            <!-- Top Hardware Row: Wall Outlet & Surge Protector -->
+            <div class="flex flex-wrap items-center justify-between gap-6 bg-slate-950/70 p-4 rounded-xl border border-slate-800/80">
+                <!-- 1. Wall Outlet & Switch -->
+                <div id="target-wall-socket" class="flex items-center gap-4 bg-slate-900 p-3 rounded-xl border border-slate-800">
+                    <div class="text-center">
+                        <span class="text-[10px] text-slate-500 font-semibold uppercase block mb-1">Wall Power</span>
+                        <!-- Interactive Wall Switch -->
+                        <button id="btn-wall-switch" onclick="toggleWallPower()" class="w-12 h-14 bg-slate-800 hover:bg-slate-700 border-2 border-slate-600 rounded-lg p-1 flex flex-col items-center justify-between transition-all shadow-md active:scale-95">
+                            <span class="text-[9px] font-bold text-slate-400">ON</span>
+                            <div id="wall-switch-toggle" class="w-8 h-5 bg-red-600 rounded-sm transition-transform duration-200 transform translate-y-3"></div>
+                            <span class="text-[9px] font-bold text-slate-400">OFF</span>
+                        </button>
+                    </div>
+                    <!-- Wall Plug Animation/State -->
+                    <div class="flex flex-col items-center">
+                        <i class="fa-solid fa-plug text-2xl text-slate-400"></i>
+                        <div id="led-wall" class="w-2.5 h-2.5 rounded-full led-off mt-1"></div>
+                    </div>
+                </div>
+
+                <!-- Cable Connecting Graphic -->
+                <div class="hidden md:flex flex-1 items-center px-2">
+                    <div class="h-1.5 w-full bg-slate-800 rounded-full relative overflow-hidden">
+                        <div id="wire-wall-surge" class="h-full bg-cyan-500 w-0 transition-all duration-500"></div>
+                    </div>
+                </div>
+
+                <!-- 2. Surge Protector / Power Strip -->
+                <div id="target-surge-protector" class="flex items-center gap-4 bg-slate-900 p-3.5 rounded-xl border border-slate-800">
+                    <div>
+                        <span class="text-[10px] text-slate-500 font-semibold uppercase block mb-1">Surge Protector</span>
+                        <div class="flex items-center gap-3">
+                            <button id="btn-surge-switch" onclick="toggleSurgePower()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-600 rounded-lg text-xs font-bold transition-all active:scale-95 flex items-center gap-2">
+                                <i class="fa-solid fa-power-off text-red-500"></i> Switch
+                            </button>
+                            <div class="flex flex-col items-center">
+                                <span class="text-[9px] text-slate-500">PROTECTED</span>
+                                <div id="led-surge" class="w-3 h-3 rounded-full led-off"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main Desk Area: PC Tower & Monitor -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 items-end my-auto">
+                
+                <!-- 3. PC Tower (Computer System Unit) -->
+                <div id="target-pc-tower" class="md:col-span-1 bg-slate-950 p-4 rounded-2xl border-2 border-slate-800 relative flex flex-col justify-between h-[320px] shadow-2xl">
+                    <!-- Fan Grill Top -->
+                    <div class="flex justify-between items-center pb-2 border-b border-slate-800">
+                        <div class="flex gap-1.5">
+                            <div class="w-2 h-2 rounded-full bg-slate-800"></div>
+                            <div class="w-2 h-2 rounded-full bg-slate-800"></div>
+                            <div class="w-2 h-2 rounded-full bg-slate-800"></div>
+                        </div>
+                        <span class="text-[10px] code-font text-slate-600">TOWER-PC 9000</span>
+                    </div>
+
+                    <!-- DVD Drive Bay / Front Panel -->
+                    <div class="space-y-2">
+                        <div class="h-6 bg-slate-900 rounded border border-slate-800/80 flex items-center justify-between px-2">
+                            <span class="text-[9px] text-slate-600">DISC DRIVE</span>
+                            <div class="w-1.5 h-1.5 rounded-full bg-slate-800"></div>
+                        </div>
+                        <!-- Front USB ports -->
+                        <div class="flex gap-2 justify-end px-1">
+                            <div class="w-3 h-1 bg-slate-800"></div>
+                            <div class="w-3 h-1 bg-slate-800"></div>
+                            <div class="w-2 h-2 rounded-full bg-slate-800"></div>
+                        </div>
+                    </div>
+
+                    <!-- Interactive PC Power Button & LEDs -->
+                    <div class="my-auto text-center py-4">
+                        <button id="btn-pc-power" onclick="pressPCPowerButton()" class="w-16 h-16 rounded-full bg-slate-900 border-2 border-slate-700 hover:border-cyan-400 flex items-center justify-center mx-auto transition-all shadow-lg active:scale-90 group relative">
+                            <i class="fa-solid fa-power-off text-2xl text-slate-600 group-hover:text-cyan-400 transition-colors"></i>
+                        </button>
+                        <span class="text-[10px] text-slate-500 font-semibold block mt-2">MAIN PC POWER</span>
+                    </div>
+
+                    <!-- Lower PC Indicators & Fan Status -->
+                    <div class="pt-3 border-t border-slate-900 flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <div id="led-pc-power" class="w-3 h-3 rounded-full led-off"></div>
+                            <span class="text-[10px] text-slate-400">PWR</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <div id="led-pc-hdd" class="w-3 h-3 rounded-full led-off"></div>
+                            <span class="text-[10px] text-slate-400">HDD</span>
+                        </div>
+                        <div class="flex items-center gap-1.5">
+                            <i id="pc-fan-icon" class="fa-solid fa-fan text-slate-700 text-sm"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 4. Monitor & Display Screen -->
+                <div id="target-monitor" class="md:col-span-2 flex flex-col items-center">
+                    <!-- Monitor Frame -->
+                    <div class="w-full bg-slate-950 border-4 border-slate-800 rounded-2xl p-3 shadow-2xl relative">
+                        
+                        <!-- Screen Canvas Display area -->
+                        <div id="monitor-screen" class="w-full h-[250px] bg-black rounded-lg relative overflow-hidden flex flex-col justify-between transition-colors duration-500">
+                            <div id="screen-overlay" class="absolute inset-0 crt-overlay pointer-events-none z-10"></div>
+                            
+                            <!-- Boot sequence or OS Desktop UI -->
+                            <div id="screen-content" class="w-full h-full p-4 flex flex-col justify-between text-slate-100 z-0">
+                                <!-- OFF State Default -->
+                                <div id="screen-off-state" class="w-full h-full flex flex-col items-center justify-center text-slate-800">
+                                    <i class="fa-solid fa-desktop text-5xl mb-2"></i>
+                                    <span class="text-xs font-semibold">NO SIGNAL</span>
+                                </div>
+
+                                <!-- Boot / POST State -->
+                                <div id="screen-boot-state" class="hidden w-full h-full code-font text-xs text-emerald-400 flex flex-col justify-between">
+                                    <div>
+                                        <p>> BIOS System Diagnostic v4.02</p>
+                                        <p>> Memory Test: 16384MB OK</p>
+                                        <p>> Primary Disk: NVMe SSD Detected</p>
+                                        <p id="boot-progress-text">> Loading Operating System...</p>
+                                    </div>
+                                    <div class="w-full bg-slate-900 rounded-full h-2 overflow-hidden border border-emerald-900">
+                                        <div id="boot-progress-bar" class="bg-emerald-500 h-full w-0 transition-all duration-300"></div>
+                                    </div>
+                                </div>
+
+                                <!-- Simulated OS Desktop UI -->
+                                <div id="screen-desktop-state" class="hidden w-full h-full flex flex-col justify-between bg-gradient-to-br from-indigo-900 via-slate-900 to-blue-900 p-2 rounded relative">
+                                    
+                                    <!-- Desktop Icons -->
+                                    <div class="grid grid-cols-3 gap-3 w-48 text-xs">
+                                        <div id="app-document" onclick="openDocApp()" class="flex flex-col items-center p-2 rounded hover:bg-white/10 cursor-pointer group">
+                                            <i class="fa-solid fa-file-lines text-2xl text-blue-400 group-hover:scale-110 transition-transform"></i>
+                                            <span class="text-[10px] mt-1 text-center">Project_Doc.txt</span>
+                                            <span id="doc-status-tag" class="text-[8px] bg-amber-500/80 text-black px-1 rounded font-bold mt-0.5">UNSAVED</span>
+                                        </div>
+                                        <div id="app-browser" onclick="openBrowserApp()" class="flex flex-col items-center p-2 rounded hover:bg-white/10 cursor-pointer group">
+                                            <i class="fa-solid fa-globe text-2xl text-teal-400 group-hover:scale-110 transition-transform"></i>
+                                            <span class="text-[10px] mt-1">Web Browser</span>
+                                        </div>
+                                    </div>
+
+                                    <!-- Window: Open Text Editor Document App -->
+                                    <div id="window-editor" class="hidden absolute top-6 left-12 right-12 bottom-12 bg-slate-900 border border-slate-700 rounded-lg shadow-2xl flex flex-col overflow-hidden z-20">
+                                        <div class="bg-slate-800 px-3 py-1.5 flex items-center justify-between text-xs border-b border-slate-700">
+                                            <span class="flex items-center gap-1.5 text-slate-300"><i class="fa-solid fa-file-lines text-blue-400"></i> Text Editor - Project_Doc.txt</span>
+                                            <button onclick="closeDocApp()" class="text-slate-400 hover:text-white px-1.5">✕</button>
+                                        </div>
+                                        <div class="p-3 flex-1 flex flex-col justify-between bg-slate-950 text-xs font-mono text-slate-300">
+                                            <p id="doc-text-content">> Final Computer Security Homework Report...\n> [Changes pending save...]</p>
+                                            <div class="flex justify-end gap-2 pt-2 border-t border-slate-800">
+                                                <button id="btn-save-doc" onclick="saveDocument()" class="px-3 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded text-xs transition-colors font-sans flex items-center gap-1">
+                                                    <i class="fa-solid fa-floppy-disk"></i> Save File
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Taskbar / Start Menu Bar -->
+                                    <div class="bg-slate-950/90 backdrop-blur border border-slate-800/80 rounded-lg p-1.5 flex items-center justify-between z-20">
+                                        <div class="flex items-center gap-2">
+                                            <button id="btn-start-menu" onclick="toggleStartMenu()" class="px-2.5 py-1 bg-cyan-600 hover:bg-cyan-500 rounded text-xs font-bold flex items-center gap-1.5 transition-colors text-white">
+                                                <i class="fa-solid fa-windows"></i> Start
+                                            </button>
+                                            <div id="taskbar-apps" class="flex gap-1 text-xs">
+                                                <span id="taskbar-doc" class="hidden bg-slate-800 px-2 py-0.5 rounded text-slate-300 text-[10px]">Doc Editor *</span>
+                                            </div>
+                                        </div>
+                                        <div class="text-[10px] code-font text-slate-400 flex items-center gap-2">
+                                            <span id="os-status-text">Ready</span>
+                                            <span>10:42 AM</span>
+                                        </div>
+                                    </div>
+
+                                    <!-- Start Menu Popup -->
+                                    <div id="start-menu-popup" class="hidden absolute bottom-12 left-2 w-48 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-2 z-30 space-y-1">
+                                        <div class="text-[10px] font-bold text-slate-400 px-2 py-1 uppercase tracking-wider">User Account</div>
+                                        <div class="h-px bg-slate-800 my-1"></div>
+                                        <button id="btn-os-shutdown" onclick="triggerOSShutdown()" class="w-full text-left px-2.5 py-1.5 hover:bg-red-500/20 text-red-400 hover:text-red-300 rounded text-xs flex items-center gap-2 transition-colors">
+                                            <i class="fa-solid fa-power-off"></i> Shut Down OS
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <!-- Crash / Error Screen (BSOD) -->
+                                <div id="screen-crash-state" class="hidden w-full h-full bg-blue-700 text-white p-6 font-mono text-xs flex flex-col justify-between">
+                                    <div>
+                                        <div class="text-3xl font-bold mb-4">:(</div>
+                                        <p class="text-sm font-bold mb-2">YOUR SYSTEM RAN INTO A PROBLEM AND WAS UNEXPECTEDLY SHUT DOWN.</p>
+                                        <p class="text-slate-200">Stop Code: IMPROPER_SHUTDOWN_DATA_CORRUPTION_RISK</p>
+                                        <p class="mt-4 text-slate-300">Turning off power while the operating system is running can cause unwritten data to be lost and corrupt file systems.</p>
+                                    </div>
+                                    <button onclick="clearCrashScreen()" class="self-start px-4 py-1.5 bg-white text-blue-900 font-sans font-bold rounded text-xs hover:bg-slate-200">
+                                        Acknowledge Error
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Monitor Lower Bezel & Power Button -->
+                        <div class="flex items-center justify-between pt-2.5 px-2">
+                            <span class="text-[10px] code-font text-slate-600">VIEW-MASTER 24"</span>
+                            <div class="flex items-center gap-3">
+                                <div id="led-monitor" class="w-2.5 h-2.5 rounded-full led-off"></div>
+                                <button id="btn-monitor-power" onclick="toggleMonitorPower()" class="w-6 h-6 rounded-full bg-slate-800 hover:bg-slate-700 border border-slate-600 flex items-center justify-center transition-all active:scale-90" title="Monitor Power Switch">
+                                    <i class="fa-solid fa-power-off text-[10px] text-slate-400"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Monitor Stand Base -->
+                    <div class="w-24 h-6 bg-slate-800 rounded-b-xl border-x-2 border-b-2 border-slate-700"></div>
+                </div>
+            </div>
+
+            <!-- Keyboard & Mouse Input Area -->
+            <div class="flex justify-center items-center gap-8 bg-slate-950/50 p-4 rounded-xl border border-slate-800/80">
+                <!-- Keyboard -->
+                <div id="target-keyboard" onclick="interactKeyboard()" class="bg-slate-900 p-3 rounded-xl border border-slate-800 cursor-pointer hover:border-slate-700 transition-all flex flex-col items-center gap-1 group">
+                    <div class="flex gap-1">
+                        <div class="w-4 h-3 bg-slate-800 rounded-sm"></div>
+                        <div class="w-4 h-3 bg-slate-800 rounded-sm"></div>
+                        <div class="w-4 h-3 bg-slate-800 rounded-sm"></div>
+                        <div class="w-8 h-3 bg-slate-800 rounded-sm"></div>
+                    </div>
+                    <div class="w-32 h-4 bg-slate-800 rounded-sm flex items-center justify-center">
+                        <div class="w-16 h-2 bg-slate-700 rounded-xs"></div>
+                    </div>
+                    <span class="text-[10px] text-slate-500 font-semibold group-hover:text-cyan-400 transition-colors">Wake / Type Keyboard</span>
+                </div>
+
+                <!-- Mouse -->
+                <div id="target-mouse" onclick="interactMouse()" class="bg-slate-900 p-3 rounded-xl border border-slate-800 cursor-pointer hover:border-slate-700 transition-all flex flex-col items-center gap-1 group">
+                    <div class="w-6 h-9 bg-slate-800 rounded-t-lg rounded-b-md border border-slate-700 flex flex-col items-center pt-1">
+                        <div class="w-1.5 h-3 bg-slate-600 rounded-full"></div>
+                    </div>
+                    <span class="text-[10px] text-slate-500 font-semibold group-hover:text-cyan-400 transition-colors">Click Mouse</span>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Completion & Rating Modal -->
+    <div id="modal-completion" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 text-center shadow-2xl relative overflow-hidden">
+            <div class="w-16 h-16 bg-emerald-500/10 border border-emerald-500/30 rounded-2xl text-emerald-400 flex items-center justify-center mx-auto mb-4 text-3xl">
+                <i class="fa-solid fa-award"></i>
+            </div>
+            <h3 class="text-2xl font-bold text-white mb-1">Sequence Completed!</h3>
+            <p id="completion-subtitle" class="text-xs text-slate-400 mb-6">You properly turned on the workstation computer setup.</p>
+
+            <!-- Stats Box -->
+            <div class="bg-slate-950 p-4 rounded-xl border border-slate-800 grid grid-cols-2 gap-4 mb-6 text-left">
+                <div>
+                    <span class="text-[10px] text-slate-500 uppercase tracking-wider block">Time Elapsed</span>
+                    <span id="final-time" class="text-lg font-bold code-font text-amber-400">00:45</span>
+                </div>
+                <div>
+                    <span class="text-[10px] text-slate-500 uppercase tracking-wider block">Final Score</span>
+                    <span id="final-score" class="text-lg font-bold code-font text-emerald-400">950</span>
+                </div>
+                <div class="col-span-2 pt-2 border-t border-slate-900">
+                    <span class="text-[10px] text-slate-500 uppercase tracking-wider block">Technician Mastery Rating</span>
+                    <span id="mastery-rating" class="text-sm font-bold text-cyan-400">IT Systems Boss 🏆</span>
+                </div>
+            </div>
+
+            <!-- Action buttons -->
+            <div class="flex gap-3">
+                <button onclick="closeCompletionModal()" class="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold rounded-xl text-xs transition-colors">
+                    Close
+                </button>
+                <button id="btn-next-mode" onclick="switchNextMode()" class="flex-1 py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white font-semibold rounded-xl text-xs transition-colors">
+                    Try Turn OFF Mode
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="bg-slate-950 border-t border-slate-800 px-6 py-3 text-center text-xs text-slate-500">
+        Educational Workstation Hardware & Maintenance Simulator &bull; Practice safe computing protocols.
+    </footer>
+
+    <script>
+        // Audio Synthesizer sound effects using Web Audio API
+        class SoundEngine {
+            constructor() {
+                this.ctx = null;
+                this.enabled = true;
+            }
+
+            init() {
+                if (!this.ctx) {
+                    this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+            }
+
+            playClick() {
+                if (!this.enabled) return;
+                this.init();
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(600, this.ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(200, this.ctx.currentTime + 0.05);
+                gain.gain.setValueAtTime(0.15, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.05);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.05);
+            }
+
+            playPowerSwitch(on = true) {
+                if (!this.enabled) return;
+                this.init();
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(on ? 150 : 300, this.ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(on ? 400 : 100, this.ctx.currentTime + 0.1);
+                gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.1);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.1);
+            }
+
+            playBeep(freq = 880, duration = 0.15) {
+                if (!this.enabled) return;
+                this.init();
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+                gain.gain.setValueAtTime(0.1, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + duration);
+            }
+
+            playErrorSound() {
+                if (!this.enabled) return;
+                this.init();
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(120, this.ctx.currentTime);
+                osc.frequency.setValueAtTime(80, this.ctx.currentTime + 0.15);
+                gain.gain.setValueAtTime(0.25, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.3);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.3);
+            }
+        }
+
+        const audio = new SoundEngine();
+
+        function toggleAudio() {
+            audio.enabled = !audio.enabled;
+            const btn = document.getElementById('audio-toggle');
+            btn.innerHTML = audio.enabled 
+                ? '<i class="fa-solid fa-volume-high text-lg"></i>' 
+                : '<i class="fa-solid fa-volume-xmark text-lg text-slate-600"></i>';
+        }
+
+        // Game Modes: 'on' | 'off' | 'sandbox'
+        let currentMode = 'on';
+        let currentStepIndex = 0;
+        let timerInterval = null;
+        let secondsElapsed = 0;
+        let score = 1000;
+
+        // Hardware Power States
+        const state = {
+            wallPower: false,
+            surgePower: false,
+            pcPower: false,
+            pcBooted: false,
+            monitorPower: false,
+            docSaved: false,
+            docOpen: false,
+            appsClosed: false,
+            osShuttingDown: false
+        };
+
+        // Sequences for ON and OFF modes
+        const turnOnSequence = [
+            {
+                id: 'wall',
+                title: 'Turn On Wall Power Switch',
+                targetId: 'target-wall-socket',
+                tipTitle: '1. Primary Power Outlet',
+                tip: 'Always check that the main wall switch is turned on to supply AC power to your workstation surge protector.'
+            },
+            {
+                id: 'surge',
+                title: 'Turn On Surge Protector / Power Strip',
+                targetId: 'target-surge-protector',
+                tipTitle: '2. Surge Protection',
+                tip: 'Surge protectors protect sensitive computer components against dangerous voltage spikes and power surges.'
+            },
+            {
+                id: 'pc',
+                title: 'Press Desktop PC Tower Power Button',
+                targetId: 'target-pc-tower',
+                tipTitle: '3. System Unit Power Button',
+                tip: 'Pressing the PC power button signals the motherboard to run diagnostic POST checks and boot up the Operating System.'
+            },
+            {
+                id: 'monitor',
+                title: 'Turn On Monitor Screen Switch',
+                targetId: 'target-monitor',
+                tipTitle: '4. Display Display Power',
+                tip: 'Monitors have independent power switches. Make sure display power is ON so you can view system startup.'
+            },
+            {
+                id: 'wake',
+                title: 'Wake / Log In using Keyboard or Mouse',
+                targetId: 'target-keyboard',
+                tipTitle: '5. User Interaction',
+                tip: 'Pressing keyboard keys or moving the mouse wakes up the OS display and lets you log in to your user desktop.'
+            }
+        ];
+
+        const turnOffSequence = [
+            {
+                id: 'save',
+                title: 'Save Open Document (Project_Doc.txt)',
+                targetId: 'app-document',
+                tipTitle: '1. Save Unsaved Work',
+                tip: 'Always save open documents before shutting down! Unsaved data stored in temporary RAM will be lost when power turns off.'
+            },
+            {
+                id: 'close',
+                title: 'Close Open File / Application',
+                targetId: 'window-editor',
+                tipTitle: '2. Close Running Apps',
+                tip: 'Closing applications allows programs to write temporary settings and clear cached data cleanly.'
+            },
+            {
+                id: 'os-shutdown',
+                title: 'Click Start -> Select "Shut Down OS"',
+                targetId: 'btn-start-menu',
+                tipTitle: '3. Software Shutdown Protocol',
+                tip: 'Using the Start Menu Shutdown sequence ensures the Operating System safely finishes disk writes and unmounts drives.'
+            },
+            {
+                id: 'monitor-off',
+                title: 'Turn Off Monitor Power Switch',
+                targetId: 'target-monitor',
+                tipTitle: '4. Display Shutdown',
+                tip: 'Turning off display monitors saves electrical energy and extends monitor backlight lifespan.'
+            },
+            {
+                id: 'surge-off',
+                title: 'Turn Off Surge Protector / Wall Switch',
+                targetId: 'target-surge-protector',
+                tipTitle: '5. Main Power Disconnect',
+                tip: 'Disconnecting power at the surge protector cuts phantom standby power draw and secures hardware when left unattended.'
+            }
+        ];
+
+        function setGameMode(mode) {
+            currentMode = mode;
+            
+            // Update mode selector UI buttons
+            const btnOn = document.getElementById('mode-turn-on');
+            const btnOff = document.getElementById('mode-turn-off');
+            const btnSandbox = document.getElementById('mode-sandbox');
+
+            btnOn.className = "px-4 py-2 rounded-lg transition-all flex items-center gap-2 " + (mode === 'on' ? "bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-lg" : "text-slate-400 hover:text-white");
+            btnOff.className = "px-4 py-2 rounded-lg transition-all flex items-center gap-2 " + (mode === 'off' ? "bg-gradient-to-r from-amber-600 to-red-600 text-white shadow-lg" : "text-slate-400 hover:text-white");
+            btnSandbox.className = "px-4 py-2 rounded-lg transition-all flex items-center gap-2 " + (mode === 'sandbox' ? "bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg" : "text-slate-400 hover:text-white");
+
+            // Reset Initial States based on mode
+            if (mode === 'on') {
+                state.wallPower = false;
+                state.surgePower = false;
+                state.pcPower = false;
+                state.pcBooted = false;
+                state.monitorPower = false;
+                state.docSaved = false;
+                state.docOpen = false;
+                state.appsClosed = false;
+                state.osShuttingDown = false;
+            } else if (mode === 'off') {
+                // Preset everything as ON for shutdown mode
+                state.wallPower = true;
+                state.surgePower = true;
+                state.pcPower = true;
+                state.pcBooted = true;
+                state.monitorPower = true;
+                state.docSaved = false;
+                state.docOpen = true;
+                state.appsClosed = false;
+                state.osShuttingDown = false;
+            }
+
+            resetTimer();
+            startTimer();
+            currentStepIndex = 0;
+            updateHardwareVisuals();
+            renderInstructions();
+        }
+
+        function startTimer() {
+            clearInterval(timerInterval);
+            secondsElapsed = 0;
+            score = 1000;
+            timerInterval = setInterval(() => {
+                secondsElapsed++;
+                if (score > 100) score -= 2;
+                const mins = String(Math.floor(secondsElapsed / 60)).padStart(2, '0');
+                const secs = String(secondsElapsed % 60).padStart(2, '0');
+                document.getElementById('timer-display').innerText = `${mins}:${secs}`;
+                document.getElementById('score-display').innerText = score;
+            }, 1000);
+        }
+
+        function resetTimer() {
+            clearInterval(timerInterval);
+            document.getElementById('timer-display').innerText = "00:00";
+            document.getElementById('score-display').innerText = "1000";
+        }
+
+        function renderInstructions() {
+            const container = document.getElementById('step-instructions');
+            container.innerHTML = '';
+
+            let sequence = currentMode === 'on' ? turnOnSequence : (currentMode === 'off' ? turnOffSequence : []);
+
+            if (currentMode === 'sandbox') {
+                document.getElementById('step-counter').innerText = "Free Play";
+                container.innerHTML = `
+                    <div class="bg-purple-950/40 border border-purple-800/50 p-3 rounded-xl text-xs text-purple-200">
+                        <p class="font-bold mb-1"><i class="fa-solid fa-flask"></i> Sandbox Mode Active</p>
+                        <p>Toggle hardware buttons freely! Observe consequences such as hard power cuts causing OS errors or file corruption warnings.</p>
+                    </div>
+                `;
+                document.getElementById('tip-title').innerText = "Sandbox Tip";
+                document.getElementById('tip-content').innerText = "Try turning off the surge protector while the PC is running to see what happens to unsaved data!";
+                clearHighlights();
+                return;
+            }
+
+            document.getElementById('step-counter').innerText = `Step ${currentStepIndex + 1} of ${sequence.length}`;
+
+            sequence.forEach((step, idx) => {
+                const isCurrent = idx === currentStepIndex;
+                const isPassed = idx < currentStepIndex;
+
+                const stepEl = document.createElement('div');
+                stepEl.className = `p-3 rounded-xl border text-xs transition-all flex items-center justify-between ${
+                    isCurrent 
+                        ? 'bg-cyan-950/60 border-cyan-500/80 text-cyan-200 font-semibold shadow-md' 
+                        : (isPassed ? 'bg-slate-950/80 border-slate-800 text-slate-500 line-through' : 'bg-slate-950/40 border-slate-800/60 text-slate-400')
+                }`;
+
+                stepEl.innerHTML = `
+                    <div class="flex items-center gap-2.5">
+                        <span class="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                            isCurrent ? 'bg-cyan-500 text-slate-950' : (isPassed ? 'bg-emerald-900 text-emerald-300' : 'bg-slate-800 text-slate-500')
+                        }">${idx + 1}</span>
+                        <span>${step.title}</span>
+                    </div>
+                    ${isPassed ? '<i class="fa-solid fa-check text-emerald-400"></i>' : ''}
+                `;
+                container.appendChild(stepEl);
+            });
+
+            // Update Educational Tip
+            const activeStep = sequence[currentStepIndex];
+            if (activeStep) {
+                document.getElementById('tip-title').innerText = activeStep.tipTitle;
+                document.getElementById('tip-content').innerText = activeStep.tip;
+                applyHighlight(activeStep.targetId);
+            }
+        }
+
+        function clearHighlights() {
+            document.querySelectorAll('.step-target').forEach(el => el.classList.remove('step-target'));
+        }
+
+        function applyHighlight(targetId) {
+            clearHighlights();
+            const el = document.getElementById(targetId);
+            if (el) el.classList.add('step-target');
+        }
+
+        // Hardware Interactions
+        function toggleWallPower() {
+            audio.playPowerSwitch(!state.wallPower);
+            state.wallPower = !state.wallPower;
+            
+            // If main power lost, power off dependent devices
+            if (!state.wallPower) {
+                handlePowerCut();
+            }
+
+            checkSequenceProgress('wall', 'surge-off');
+            updateHardwareVisuals();
+        }
+
+        function toggleSurgePower() {
+            if (!state.wallPower) {
+                audio.playErrorSound();
+                showNotification("No Wall Power! Ensure the main wall switch is turned on first.");
+                return;
+            }
+
+            audio.playPowerSwitch(!state.surgePower);
+            state.surgePower = !state.surgePower;
+
+            if (!state.surgePower) {
+                handlePowerCut();
+            }
+
+            checkSequenceProgress('surge', 'surge-off');
+            updateHardwareVisuals();
+        }
+
+        function pressPCPowerButton() {
+            if (!state.surgePower) {
+                audio.playErrorSound();
+                showNotification("No Electrical Power! Check wall outlet & surge protector switches.");
+                return;
+            }
+
+            if (!state.pcPower) {
+                audio.playBeep(523.25, 0.1);
+                state.pcPower = true;
+                triggerPCBootProcess();
+            } else {
+                // Turning off PC button directly
+                audio.playPowerSwitch(false);
+                if (state.pcBooted && currentMode === 'off' && !state.docSaved) {
+                    triggerCrashScreen("HARD POWER OFF DETECTED! Unsaved document data was corrupted/lost.");
+                }
+                state.pcPower = false;
+                state.pcBooted = false;
+            }
+
+            checkSequenceProgress('pc');
+            updateHardwareVisuals();
+        }
+
+        function triggerPCBootProcess() {
+            updateHardwareVisuals();
+            const bootText = document.getElementById('boot-progress-text');
+            const progressBar = document.getElementById('boot-progress-bar');
+            
+            let progress = 0;
+            const interval = setInterval(() => {
+                progress += 25;
+                if (progressBar) progressBar.style.width = progress + '%';
+                if (progress >= 100) {
+                    clearInterval(interval);
+                    state.pcBooted = true;
+                    audio.playBeep(880, 0.2);
+                    updateHardwareVisuals();
+                }
+            }, 300);
+        }
+
+        function toggleMonitorPower() {
+            audio.playPowerSwitch(!state.monitorPower);
+            state.monitorPower = !state.monitorPower;
+
+            checkSequenceProgress('monitor', 'monitor-off');
+            updateHardwareVisuals();
+        }
+
+        function interactKeyboard() {
+            audio.playClick();
+            if (state.pcBooted && state.monitorPower) {
+                if (currentMode === 'on') {
+                    checkSequenceProgress('wake');
+                }
+            }
+        }
+
+        function interactMouse() {
+            audio.playClick();
+            if (state.pcBooted && state.monitorPower) {
+                if (currentMode === 'on') {
+                    checkSequenceProgress('wake');
+                }
+            }
+        }
+
+        // OS App Functions
+        function openDocApp() {
+            audio.playClick();
+            if (!state.pcBooted || !state.monitorPower) return;
+            state.docOpen = true;
+            if (currentMode === 'off' && currentStepIndex === 0) {
+                applyHighlight('btn-save-doc');
+            }
+            updateHardwareVisuals();
+        }
+
+        function closeDocApp() {
+            audio.playClick();
+            if (!state.docSaved && currentMode === 'off') {
+                audio.playErrorSound();
+                showNotification("Warning: Save changes before closing the document!");
+                return;
+            }
+            state.docOpen = false;
+            state.appsClosed = true;
+            checkSequenceProgress('close');
+            updateHardwareVisuals();
+        }
+
+        function saveDocument() {
+            audio.playBeep(1000, 0.1);
+            state.docSaved = true;
+            showNotification("File saved successfully to drive!");
+            checkSequenceProgress('save');
+            updateHardwareVisuals();
+        }
+
+        function toggleStartMenu() {
+            audio.playClick();
+            if (!state.pcBooted || !state.monitorPower) return;
+            const menu = document.getElementById('start-menu-popup');
+            menu.classList.toggle('hidden');
+        }
+
+        function triggerOSShutdown() {
+            audio.playClick();
+            if (state.docOpen && !state.docSaved) {
+                audio.playErrorSound();
+                showNotification("Cannot Shutdown: Close open applications and save files first!");
+                return;
+            }
+
+            state.osShuttingDown = true;
+            showNotification("Operating system shutting down safely...");
+            document.getElementById('start-menu-popup').classList.add('hidden');
+
+            setTimeout(() => {
+                state.pcPower = false;
+                state.pcBooted = false;
+                state.osShuttingDown = false;
+                audio.playPowerSwitch(false);
+                checkSequenceProgress('os-shutdown');
+                updateHardwareVisuals();
+            }, 1500);
+        }
+
+        function handlePowerCut() {
+            if (state.pcPower || state.pcBooted) {
+                if (state.docOpen && !state.docSaved && currentMode !== 'on') {
+                    triggerCrashScreen("CRITICAL WARNING: Power cut while OS was running! Unsaved files lost and drive file-system corrupted.");
+                } else {
+                    showNotification("Power cut off unexpectedly!");
+                }
+            }
+            state.surgePower = false;
+            state.pcPower = false;
+            state.pcBooted = false;
+        }
+
+        function triggerCrashScreen(message) {
+            audio.playErrorSound();
+            const crashState = document.getElementById('screen-crash-state');
+            crashState.classList.remove('hidden');
+            if (score >= 200) score -= 200;
+            document.getElementById('score-display').innerText = score;
+        }
+
+        function clearCrashScreen() {
+            document.getElementById('screen-crash-state').classList.add('hidden');
+            updateHardwareVisuals();
+        }
+
+        // Hardware Visual Updates
+        function updateHardwareVisuals() {
+            // Wall switch toggle position
+            const wallToggle = document.getElementById('wall-switch-toggle');
+            const ledWall = document.getElementById('led-wall');
+            const wireWallSurge = document.getElementById('wire-wall-surge');
+
+            if (state.wallPower) {
+                wallToggle.className = "w-8 h-5 bg-emerald-500 rounded-sm transition-transform duration-200 transform translate-y-0";
+                ledWall.className = "w-2.5 h-2.5 rounded-full led-green";
+                wireWallSurge.style.width = "100%";
+            } else {
+                wallToggle.className = "w-8 h-5 bg-red-600 rounded-sm transition-transform duration-200 transform translate-y-3";
+                ledWall.className = "w-2.5 h-2.5 rounded-full led-off";
+                wireWallSurge.style.width = "0%";
+            }
+
+            // Surge protector LED
+            const ledSurge = document.getElementById('led-surge');
+            if (state.wallPower && state.surgePower) {
+                ledSurge.className = "w-3 h-3 rounded-full led-green";
+            } else {
+                ledSurge.className = "w-3 h-3 rounded-full led-off";
+            }
+
+            // PC Tower LEDs & Fan
+            const ledPCPower = document.getElementById('led-pc-power');
+            const ledPCHdd = document.getElementById('led-pc-hdd');
+            const pcFan = document.getElementById('pc-fan-icon');
+
+            if (state.pcPower) {
+                ledPCPower.className = "w-3 h-3 rounded-full " + (state.pcBooted ? "led-blue pulsing" : "led-amber");
+                ledPCHdd.className = "w-3 h-3 rounded-full " + (state.pcBooted ? "led-green" : "led-off");
+                pcFan.className = "fa-solid fa-fan text-cyan-400 text-sm animate-spin";
+            } else {
+                ledPCPower.className = "w-3 h-3 rounded-full led-off";
+                ledPCHdd.className = "w-3 h-3 rounded-full led-off";
+                pcFan.className = "fa-solid fa-fan text-slate-700 text-sm";
+            }
+
+            // Monitor LED
+            const ledMonitor = document.getElementById('led-monitor');
+            if (state.monitorPower) {
+                ledMonitor.className = "w-2.5 h-2.5 rounded-full " + (state.pcBooted ? "led-green" : "led-amber");
+            } else {
+                ledMonitor.className = "w-2.5 h-2.5 rounded-full led-off";
+            }
+
+            // Screen Display States
+            const screenOff = document.getElementById('screen-off-state');
+            const screenBoot = document.getElementById('screen-boot-state');
+            const screenDesktop = document.getElementById('screen-desktop-state');
+            const docStatusTag = document.getElementById('doc-status-tag');
+            const docWindow = document.getElementById('window-editor');
+            const taskbarDoc = document.getElementById('taskbar-doc');
+
+            screenOff.classList.add('hidden');
+            screenBoot.classList.add('hidden');
+            screenDesktop.classList.add('hidden');
+
+            if (!state.monitorPower || !state.surgePower || !state.wallPower) {
+                screenOff.classList.remove('hidden');
+            } else if (state.pcPower && !state.pcBooted) {
+                screenBoot.classList.remove('hidden');
+            } else if (state.pcBooted) {
+                screenDesktop.classList.remove('hidden');
+            } else {
+                screenOff.classList.remove('hidden');
+            }
+
+            // Document status tag
+            if (state.docSaved) {
+                docStatusTag.innerText = "SAVED";
+                docStatusTag.className = "text-[8px] bg-emerald-500/80 text-black px-1 rounded font-bold mt-0.5";
+            } else {
+                docStatusTag.innerText = "UNSAVED";
+                docStatusTag.className = "text-[8px] bg-amber-500/80 text-black px-1 rounded font-bold mt-0.5";
+            }
+
+            // Open window editor
+            if (state.docOpen) {
+                docWindow.classList.remove('hidden');
+                taskbarDoc.classList.remove('hidden');
+            } else {
+                docWindow.classList.add('hidden');
+                taskbarDoc.classList.add('hidden');
+            }
+        }
+
+        function checkSequenceProgress(actionId, secondaryActionId = null) {
+            if (currentMode === 'sandbox') return;
+
+            const sequence = currentMode === 'on' ? turnOnSequence : turnOffSequence;
+            const currentStep = sequence[currentStepIndex];
+
+            if (currentStep && (currentStep.id === actionId || currentStep.id === secondaryActionId)) {
+                currentStepIndex++;
+                audio.playBeep(1200, 0.1);
+
+                if (currentStepIndex >= sequence.length) {
+                    clearInterval(timerInterval);
+                    showCompletionModal();
+                } else {
+                    renderInstructions();
+                }
+            }
+        }
+
+        function showHint() {
+            audio.playClick();
+            const sequence = currentMode === 'on' ? turnOnSequence : turnOffSequence;
+            const step = sequence[currentStepIndex];
+            if (step) {
+                showNotification(`Hint: Perform step "${step.title}"`);
+                applyHighlight(step.targetId);
+            }
+        }
+
+        function resetCurrentSequence() {
+            setGameMode(currentMode);
+        }
+
+        function showCompletionModal() {
+            const modal = document.getElementById('modal-completion');
+            modal.classList.remove('hidden');
+
+            const mins = String(Math.floor(secondsElapsed / 60)).padStart(2, '0');
+            const secs = String(secondsElapsed % 60).padStart(2, '0');
+            document.getElementById('final-time').innerText = `${mins}:${secs}`;
+            document.getElementById('final-score').innerText = score;
+
+            const nextBtn = document.getElementById('btn-next-mode');
+            if (currentMode === 'on') {
+                document.getElementById('completion-subtitle').innerText = "You successfully mastered turning on the desktop computer!";
+                nextBtn.innerText = "Try Turn OFF Mode";
+                nextBtn.onclick = () => { closeModal(); setGameMode('off'); };
+            } else {
+                document.getElementById('completion-subtitle').innerText = "You successfully mastered safe software and hardware shutdown!";
+                nextBtn.innerText = "Try Sandbox Mode";
+                nextBtn.onclick = () => { closeModal(); setGameMode('sandbox'); };
+            }
+
+            let rating = "Novice Power Switcher 🔌";
+            if (score >= 900) rating = "Computer Technician Boss 💻🏆";
+            else if (score >= 700) rating = "IT Hardware Specialist 🛠️";
+            else if (score >= 500) rating = "Safe PC Operator ⚡";
+
+            document.getElementById('mastery-rating').innerText = rating;
+        }
+
+        function closeModal() {
+            document.getElementById('modal-completion').classList.add('hidden');
+        }
+
+        function closeCompletionModal() {
+            closeModal();
+        }
+
+        function showNotification(msg) {
+            const toast = document.createElement('div');
+            toast.className = "fixed bottom-6 right-6 bg-slate-800 border border-slate-700 text-slate-100 text-xs px-4 py-3 rounded-xl shadow-2xl z-50 flex items-center gap-2 animate-bounce";
+            toast.innerHTML = `<i class="fa-solid fa-bell text-cyan-400"></i> ${msg}`;
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 3000);
+        }
+
+        // Initialize setup on load
+        window.onload = function() {
+            setGameMode('on');
+        };
+    </script>
+</body>
+</html>
